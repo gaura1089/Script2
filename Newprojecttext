@@ -1,0 +1,30 @@
+Dekho snario kuch aisa hain...
+
+1. HR ko ek portal ka access diya jaye jha wo user firstname , lastname, displayname, employee code, licence , OU ye sab info put krenge ...
+
+
+
+Sayad ye portal share point ka theek rahega...
+
+2. Humko mail aayegi approval ke liye , hamare approval ke baad , automate script run hogi and wo script us data ko fatch kregi aur based pr access create kr degi hybrid exchange pr...
+
+
+3. OU select krne ke kaafi saare option honge.. drop down mein. Unme se select kr ke account un Ou mein ban jayega..
+
+
+4. Jab exchange hybrid mein account show hoga ya create hote time license mein jo value daali hogi jain E1,E3,F1 To wo custom attribute no4 mein set ho jayega...
+
+
+5. Aur Active directory mein emp code description mein set ho jayega..
+Kuch time baad .. kyu jaise hi account create hota hain To turant AD mein show nhi hota To emplo code set hoga lkin kuch time baad khud se ..
+
+
+6. Jab Hr form fill krein ya share point mein jo entry use dikhe unme ek entry ye bhi ho ki Isms test pass Kiya hain ya nhi , usko upload krne ka option jo kisi bhi format mein ho skta jaise pdf,jpg,img
+
+
+
+Dekho script mere pass already hain Jo hybrid exchange pr remote mailbox create krti hain...
+
+Usko modify Krna hoga bas..
+
+Jo condition maine batai hain uske hisab se...

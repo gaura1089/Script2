@@ -5,17 +5,18 @@ param(
     [string]$DisplayName,
     [string]$OU,
     [string]$EmpCode,
-    [string]$License   # ✅ ADDED (future use)
+    [string]$License,
+    [string]$HRName
 )
 
 Import-Module ActiveDirectory
 
 # =========================================
-# UPDATED PATHS ✅
+# PATHS
 # =========================================
 $BaseFolder = "C:\Users\Gaurav.26\OneDrive - Coforge Limited\Documents\UserAutomation"
 $LogFolder = "$BaseFolder\Logs"
-$OUConfigPath = "$BaseFolder\OU_Config\OUs.json"   # ✅ NEW
+$OUConfigPath = "$BaseFolder\OU_Config\OUs.json"
 
 if (!(Test-Path $LogFolder)) {
     New-Item -ItemType Directory -Path $LogFolder -Force | Out-Null
@@ -27,13 +28,12 @@ if ($Mode -ne "Single") {
 }
 
 # =========================================
-# 🔥 NEW OU JSON MAPPING (REPLACED SWITCH ✅)
+# OU MAPPING
 # =========================================
-
 try {
     $OUMap = Get-Content $OUConfigPath -Raw | ConvertFrom-Json
 } catch {
-    Write-Host "OU JSON not found ❌"
+    Write-Host "OU JSON not found âŒ"
     exit 1
 }
 
@@ -41,49 +41,31 @@ $OUPath = $OUMap.$OU
 
 if (-not $OUPath) {
 
-    $SafeName = $EmpCode
-    $ErrorLog = "$LogFolder\$SafeName`_ERROR.csv"
-
-    [PSCustomObject]@{
-        EmpCode     = $EmpCode
-        DisplayName = $DisplayName
-        Status      = "FAILED"
-        Error       = "INVALID OU : $OU"
-        OU          = $OU
-    } | Export-Csv $ErrorLog -NoTypeInformation -Encoding UTF8
-
-    exit 1
-}
-
-# =========================================
-# EXCHANGE CONNECT ✅ (UNCHANGED)
-# =========================================
-
-$Cred = Import-Clixml "$BaseFolder\Creds\Cred.xml"
-
-try {
-    $Session = New-PSSession -ConfigurationName Microsoft.Exchange `
-        -ConnectionUri http://IN-TZ1-EXMBX2.in.coforgetech.com/PowerShell/ `
-        -Authentication Kerberos -Credential $Cred -ErrorAction Stop
-
-    Import-PSSession $Session -DisableNameChecking -AllowClobber | Out-Null
-}
-catch {
-    $SafeName = $EmpCode
-    $ErrorLog = "$LogFolder\$SafeName`_ERROR.csv"
+    $ErrorLog = "$LogFolder\$EmpCode`_ERROR.csv"
 
     [PSCustomObject]@{
         EmpCode=$EmpCode
         DisplayName=$DisplayName
         Status="FAILED"
-        Error=$_.Exception.Message
+        Error="INVALID OU : $OU"
     } | Export-Csv $ErrorLog -NoTypeInformation -Encoding UTF8
 
     exit 1
 }
 
 # =========================================
-# PASSWORD ✅ (UNCHANGED)
+# EXCHANGE CONNECT
+# =========================================
+$Cred = Import-Clixml "$BaseFolder\Creds\Cred.xml"
+
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange `
+    -ConnectionUri http://IN-TZ1-EXMBX2.in.coforgetech.com/PowerShell/ `
+    -Authentication Kerberos -Credential $Cred
+
+Import-PSSession $Session -DisableNameChecking -AllowClobber | Out-Null
+
+# =========================================
+# PASSWORD
 # =========================================
 function Generate-RandomPassword {
     param([int]$Length = 15)
@@ -93,8 +75,12 @@ function Generate-RandomPassword {
     })
 }
 
+# =========================================
+# DOMAIN CHECK
+# =========================================
 function Alias-Exists {
     param($Alias)
+
     $domains=@("IN.COFORGETECH.COM","UK.COFORGETECH.COM","US.COFORGETECH.COM")
 
     foreach($domain in $domains){
@@ -104,7 +90,9 @@ function Alias-Exists {
     return $false
 }
 
-# ✅ SAME alias logic untouched
+# =========================================
+# âœ… FINAL ALIAS LOGIC (UPDATED ðŸ”¥)
+# =========================================
 function Get-UniqueAlias {
     param($FirstName,$LastName)
 
@@ -115,51 +103,51 @@ function Get-UniqueAlias {
     $FirstName = ($FirstName -replace '\s','').ToLower()
     $LastName  = ($LastName -replace '\s','').ToLower()
 
-    function Get-AvailableAlias {
-        param($BaseAlias)
+    # âœ… STEP 1 â€” Full name
+    if ($LastName) {
+        $fullAlias = "$FirstName.$LastName"
 
-        if ($BaseAlias.Length -gt $maxAliasLength) { return $null }
-
-        if (-not (Alias-Exists $BaseAlias)) { return $BaseAlias }
-
-        $count = 1
-        while ($true) {
-            if ($BaseAlias.Contains(".")) {
-                $parts = $BaseAlias.Split(".")
-                if ($parts.Count -eq 2) {
-                    $newAlias = "$($parts[0]).$count.$($parts[1])"
-                } else {
-                    $newAlias = "$BaseAlias.$count"
-                }
-            } else {
-                $newAlias = "$BaseAlias.$count"
-            }
-
-            if ($newAlias.Length -le $maxAliasLength) {
-                if (-not (Alias-Exists $newAlias)) { return $newAlias }
-            }
-
-            $count++
+        if ($fullAlias.Length -le $maxAliasLength -and -not (Alias-Exists $fullAlias)) {
+            return $fullAlias
         }
     }
 
+    # âœ… STEP 2 â€” Short format
     if ($LastName) {
-        $result = Get-AvailableAlias "$FirstName.$LastName"
-        if ($result) { return $result }
+        $baseAlias = "$FirstName.$($LastName.Substring(0,1))"
+    } else {
+        $baseAlias = $FirstName
     }
 
-    if ($LastName) {
-        $result = Get-AvailableAlias "$FirstName.$($LastName.Substring(0,1))"
-        if ($result) { return $result }
+    if ($baseAlias.Length -gt $maxAliasLength) {
+        $baseAlias = $FirstName.Substring(0,$maxAliasLength)
     }
 
-    return Get-AvailableAlias $FirstName.Substring(0,[Math]::Min($maxAliasLength,$FirstName.Length))
+    if (-not (Alias-Exists $baseAlias)) {
+        return $baseAlias
+    }
+
+    # âœ… STEP 3 â€” Numbering (SAFE)
+    $count = 1
+
+    while ($true) {
+
+        $newAlias = "$FirstName.$count.$($LastName.Substring(0,1))"
+
+        if ($newAlias.Length -le $maxAliasLength) {
+
+            if (-not (Alias-Exists $newAlias)) {
+                return $newAlias
+            }
+        }
+
+        $count++
+    }
 }
 
 # =========================================
-# CREATE MAILBOX ✅
+# CREATE USER
 # =========================================
-
 $Password = Generate-RandomPassword
 $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
 
@@ -168,6 +156,8 @@ $UPN = "$Alias@coforge.com"
 $Routing = "$Alias@ntlgnoida.mail.onmicrosoft.com"
 
 try {
+
+    Write-Host "Creating user: $DisplayName ($Alias)" -ForegroundColor Cyan
 
     New-RemoteMailbox `
         -Name $DisplayName `
@@ -183,23 +173,8 @@ try {
 
     Start-Sleep 10
 
-# =========================================
-# ✅ SET CUSTOM ATTRIBUTES (NEW 🚀)
-# =========================================
-
-# =========================================
-# ✅ SET CUSTOM ATTRIBUTES + DISABLE EMAIL POLICY
-# =========================================
-
-# =========================================
-# ✅ SET CUSTOM ATTRIBUTES + DISABLE EMAIL POLICY
-# =========================================
-
-try {
-
+    # âœ… ATTRIBUTES
     $CustomAttr1 = "$EmpCode,P"
-
-    Write-Host "Setting Custom Attributes & Email Policy..." -ForegroundColor Yellow
 
     Set-RemoteMailbox `
         -Identity $UPN `
@@ -208,25 +183,10 @@ try {
         -EmailAddressPolicyEnabled $false `
         -ErrorAction Stop
 
-    Write-Host "Custom Attributes + Email Policy Updated ✅" -ForegroundColor Green
-}
-catch {
+    Write-Host "âœ… User Created Successfully" -ForegroundColor Green
 
-    Write-Host "Failed to update attributes ❌" -ForegroundColor Red
-
-    $SafeName = $EmpCode
-    $ErrorLog = "$LogFolder\$SafeName`_ERROR.csv"
-
-    [PSCustomObject]@{
-        EmpCode=$EmpCode
-        DisplayName=$DisplayName
-        Status="FAILED"
-        Error="Attribute/Policy update failed: $($_.Exception.Message)"
-    } | Export-Csv $ErrorLog -NoTypeInformation -Encoding UTF8
-}
-
-    $SafeName = $EmpCode
-    $LogPath = "$LogFolder\$SafeName.csv"
+    # âœ… LOG
+    $LogPath = "$LogFolder\$EmpCode.csv"
 
     [PSCustomObject]@{
         EmpCode=$EmpCode
@@ -234,22 +194,20 @@ catch {
         Alias=$Alias
         Email=$UPN
         Password=$Password
+        License=$License
+        HRName=$HRName
         Status="SUCCESS"
-        OU=$OU
-        License=$License   # ✅ logged
     } | Export-Csv $LogPath -NoTypeInformation -Encoding UTF8
 }
 catch {
 
-    $SafeName = $EmpCode
-    $ErrorLog = "$LogFolder\$SafeName`_ERROR.csv"
+    $ErrorLog = "$LogFolder\$EmpCode`_ERROR.csv"
 
     [PSCustomObject]@{
         EmpCode=$EmpCode
         DisplayName=$DisplayName
         Status="FAILED"
         Error=$_.Exception.Message
-        OU=$OU
     } | Export-Csv $ErrorLog -NoTypeInformation -Encoding UTF8
 }
 
